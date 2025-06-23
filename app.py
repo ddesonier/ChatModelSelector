@@ -9,37 +9,176 @@ from azure.mgmt.cognitiveservices import CognitiveServicesManagementClient
 from dotenv import load_dotenv
 
 load_dotenv()
+
 # Get user input for AOAI endpoint, API key, API version, and deployment name
 endpoint = os.getenv('AZURE_OPENAI_ENDPOINT')
+
 apikey = os.getenv('AZURE_OPENAI_KEY')
-apiversion = os.getenv('AZ_OPENAI_API_VERSION')
+
+# Try multiple environment variable names for API version and provide fallback
+apiversion = os.getenv('AZURE_OPENAI_API_VERSION') or os.getenv('OPENAI_API_VERSION') or '2024-06-01'
+
+# Get Azure resource details
+subscription_id = os.getenv('SUBSCRIPTION_ID')
+
+resource_group_name = os.getenv('RESOURCE_GROUP_NAME')
+
+aoai_account_name = os.getenv('AOAI_ACCOUNT_NAME')
+
+
+print(f"Endpoint: {endpoint}")
+print(f"APIKey: {apikey}")
+print(f"API Version: {apiversion}")
+print(f"Subscription ID: {subscription_id}")
+print(f"Resource Group Name: {resource_group_name}")
+print(f"AOAI Account Name: {aoai_account_name}")
+
+# Display configuration in Streamlit for debugging
+with st.expander("🔧 Current Configuration (for debugging)", expanded=False):
+    st.write("**Environment Variables Loaded:**")
+    st.write(f"- AZURE_OPENAI_ENDPOINT: `{endpoint or 'NOT SET'}`")
+    st.write(f"- AZURE_OPENAI_KEY: `{'***' + (apikey[-4:] if apikey else 'NOT SET')}`")
+    st.write(f"- AZURE_OPENAI_API_VERSION: `{apiversion}`")
+    st.write(f"- SUBSCRIPTION_ID: `{subscription_id or 'NOT SET'}`")
+    st.write(f"- RESOURCE_GROUP_NAME: `{resource_group_name or 'NOT SET'}`")
+    st.write(f"- AOAI_ACCOUNT_NAME: `{aoai_account_name or 'NOT SET'}`")
+    
+    if all([endpoint, apikey, subscription_id, resource_group_name, aoai_account_name]):
+        st.success("✅ All required environment variables are set")
+    else:
+        st.error("❌ Some required environment variables are missing")
+
+# Validate required parameters
+required_vars = {
+    'AZURE_OPENAI_ENDPOINT': endpoint,
+    'AZURE_OPENAI_KEY': apikey,
+    'SUBSCRIPTION_ID': subscription_id,
+    'RESOURCE_GROUP_NAME': resource_group_name,
+    'AOAI_ACCOUNT_NAME': aoai_account_name
+}
+
+missing_vars = [var for var, value in required_vars.items() if not value]
+if missing_vars:
+    st.error(f"Missing required environment variables: {', '.join(missing_vars)}")
+    st.error("Please check your .env file and ensure all required variables are set.")
+    st.stop()
 
 # Authenticate using AzureKeyCredential
 credential = AzureKeyCredential(apikey)
 
-# Create OpenAI client
-client = AzureOpenAI(
-  azure_endpoint = endpoint, 
-  api_key=apikey,  
-  api_version=apiversion
-)
+# Create OpenAI client with error handling
+try:
+    client = AzureOpenAI(
+        azure_endpoint=endpoint, 
+        api_key=apikey,  
+        api_version=apiversion
+    )
+except Exception as e:
+    st.error(f"Failed to initialize Azure OpenAI client: {str(e)}")
+    st.error("Please verify your Azure OpenAI endpoint and API key.")
+    st.stop()
 
-client2 = CognitiveServicesManagementClient(
-    credential=DefaultAzureCredential(),
-    subscription_id=os.getenv('SUBSCRIPTION_ID'),
-)
+# Create Cognitive Services client and list deployments with error handling
+try:
+    print("Attempting to create Cognitive Services client...")
+    client2 = CognitiveServicesManagementClient(
+        credential=DefaultAzureCredential(),
+        subscription_id=subscription_id,
+    )
+    print("Cognitive Services client created successfully")
+    
+    print(f"Attempting to list deployments for resource: {aoai_account_name} in RG: {resource_group_name}")
+    results = client2.deployments.list(
+        resource_group_name=resource_group_name,
+        account_name=aoai_account_name,
+    )
+    print("Deployment list call successful")
+    
+    # List deployments
+    deployments = []
+    deployment_count = 0
+    for item in results:
+        deployments.append(item.name)
+        deployment_count += 1
+        print(f"Found deployment: {item.name}")
+    
+    print(f"Total deployments found: {deployment_count}")
+        
+except Exception as e:
+    print(f"Exception occurred: {type(e).__name__}: {str(e)}")
+    st.error(f"Failed to retrieve deployments: {str(e)}")
+    
+    if "ResourceNotFound" in str(e):
+        st.error(f"❌ Azure OpenAI resource '{aoai_account_name}' not found in resource group '{resource_group_name}'.")
+        st.error("Please verify the following in your .env file:")
+        st.error("- RESOURCE_GROUP_NAME: The correct resource group name")
+        st.error("- AOAI_ACCOUNT_NAME: The correct Azure OpenAI account name")
+        st.error("- SUBSCRIPTION_ID: The correct subscription ID")
+        
+        # Provide helpful commands
+        st.info("💡 Try these Azure CLI commands to find your resources:")
+        st.code("""# List all Azure OpenAI resources in your subscription
+az cognitiveservices account list --query "[?kind=='OpenAI'].{name:name, resourceGroup:resourceGroup, location:location}" -o table
 
-results = client2.deployments.list(
-    resource_group_name=os.getenv('RESOURCE_GROUP_NAME'),
-    account_name=os.getenv('AOAI_ACCOUNT_NAME'),
-)
+# List resource groups
+az group list --query "[].name" -o table
 
-# List deployments
-#deployments = client2.list_deployments()
-deployments = []
-for item in results:
-    deployments.append(item.name)
-    #print(item.name)
+# Check current subscription
+az account show --query "{name:name, id:id}" -o table""")
+        
+    elif "AuthenticationFailed" in str(e) or "Unauthorized" in str(e):
+        st.error("❌ Authentication failed. Please check your Azure credentials.")
+        st.info("💡 Try running: `az login` to authenticate with Azure")
+        
+    elif "Forbidden" in str(e):
+        st.error("❌ Access denied. You don't have permission to access this resource.")
+        st.info("💡 You need at least 'Cognitive Services User' role on the Azure OpenAI resource")
+        st.info("Contact your Azure administrator to grant proper permissions")
+        
+    else:
+        st.error("❌ Please check your Azure credentials and permissions.")
+        st.info("💡 Common solutions:")
+        st.info("- Run `az login` to authenticate")
+        st.info("- Verify you're in the correct subscription: `az account show`")
+        st.info("- Check if the resource exists: `az cognitiveservices account show --name [resource-name] --resource-group [rg-name]`")
+    
+    deployments = []  # Fallback to empty list
+
+# Check if deployments are available
+if not deployments:
+    st.warning("⚠️ No deployments found or unable to retrieve deployments.")
+    
+    st.info("🔍 **Quick Diagnostic Steps:**")
+    st.info("1. **Check Console Output**: Look at the terminal/console where you ran `streamlit run app.py` for detailed error messages")
+    st.info("2. **Verify Resource Exists**: Check if your Azure OpenAI resource actually exists in the Azure portal")
+    st.info("3. **Check Deployments**: Ensure your Azure OpenAI resource has model deployments created")
+    
+    st.info("🛠️ **How to Fix:**")
+    
+    with st.expander("📋 Option 1: Use the Discovery Script (Recommended)"):
+        st.code("""# Run this in PowerShell
+.\\discover-azure-resources.ps1""")
+        st.write("This will automatically find your Azure OpenAI resources and show the correct values to use.")
+    
+    with st.expander("🔧 Option 2: Manual Verification"):
+        st.code("""# Check if you're logged in to Azure
+az account show
+
+# Find your Azure OpenAI resources
+az cognitiveservices account list --query "[?kind=='OpenAI']" -o table
+
+# Check deployments for a specific resource
+az cognitiveservices account deployment list --name YOUR_RESOURCE_NAME --resource-group YOUR_RG_NAME""")
+    
+    with st.expander("➕ Option 3: Create New Deployment"):
+        st.write("If your resource exists but has no deployments:")
+        st.write("1. Go to Azure Portal → Your OpenAI Resource → Model deployments")
+        st.write("2. Click 'Create new deployment'")
+        st.write("3. Select a model (e.g., gpt-35-turbo, gpt-4) and give it a name")
+        st.write("4. Deploy the model")
+    
+    st.error("🛑 **App stopped** - Please resolve the deployment issue above and refresh the page.")
+    st.stop()
 
 model = st.selectbox(
     'Select Model Deployment:',
@@ -105,7 +244,7 @@ if clear_button:
 download_conversation_button = st.sidebar.download_button(
     "Download Conversation",
     data=json.dumps(st.session_state["messages"]),
-    file_name=f"conversation.json",
+    file_name="conversation.json",
     mime="text/json",
 )
 
