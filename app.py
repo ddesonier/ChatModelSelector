@@ -295,6 +295,10 @@ def create_azure_credential():
         print(f"❌ DefaultAzureCredential failed: {e}")
         raise Exception("All authentication methods failed. Please check your Entra ID configuration.")
 
+# Initialize deployments variables
+deployments = []
+retrieved_deployments = []
+
 try:
     print("Attempting to create Cognitive Services client...")
     azure_credential = create_azure_credential()
@@ -323,8 +327,7 @@ try:
     
     end_time = time.time()
     print(f"✅ Deployment list call successful (took {end_time - start_time:.2f} seconds)")
-    
-    # List deployments with better error handling
+      # List deployments with better error handling
     deployments = []
     deployment_count = 0
     
@@ -350,6 +353,9 @@ try:
             st.write(f"- Response time: {end_time - start_time:.2f} seconds")
     else:
         st.warning("⚠️ Connected to Azure but no deployments found.")
+    
+    # Store deployments in a variable that won't be reset by exception handling
+    retrieved_deployments = deployments.copy()
         
 except Exception as e:
     print(f"Exception occurred: {type(e).__name__}: {str(e)}")
@@ -435,10 +441,11 @@ az cognitiveservices account list --query "[?kind=='OpenAI'].{name:name, resourc
     st.info("💡 **Debug Information:**")
     st.info("Check the console/terminal output for detailed authentication attempts and error messages.")
     
-    deployments = []  # Fallback to empty list when exception occurs
+    # Keep deployments empty on error
+    retrieved_deployments = []
 
 # Check if deployments are available
-if not deployments:
+if not retrieved_deployments:
     st.warning("⚠️ No deployments found or unable to retrieve deployments.")
     
     st.info("🔍 **Quick Diagnostic Steps:**")
@@ -475,8 +482,8 @@ az cognitiveservices account deployment list --name YOUR_RESOURCE_NAME --resourc
 
 model = st.selectbox(
     'Select Model Deployment:',
-    deployments
-) 
+    retrieved_deployments
+)
 
 
 # Set up the default prompt for the AI assistant
