@@ -43,10 +43,26 @@ with st.expander("🔧 Current Configuration (for debugging)", expanded=False):
     st.write(f"- RESOURCE_GROUP_NAME: `{resource_group_name or 'NOT SET'}`")
     st.write(f"- AOAI_ACCOUNT_NAME: `{aoai_account_name or 'NOT SET'}`")
     
+    # Service Principal credentials
+    sp_client_id = os.getenv('AZURE_CLIENT_ID')
+    sp_client_secret = os.getenv('AZURE_CLIENT_SECRET')
+    sp_tenant_id = os.getenv('AZURE_TENANT_ID')
+    
+    st.write("**Service Principal Credentials (for Docker):**")
+    st.write(f"- AZURE_CLIENT_ID: `{sp_client_id or 'NOT SET'}`")
+    st.write(f"- AZURE_CLIENT_SECRET: `{'***' + (sp_client_secret[-4:] if sp_client_secret else 'NOT SET')}`")
+    st.write(f"- AZURE_TENANT_ID: `{sp_tenant_id or 'NOT SET'}`")
+    
     if all([endpoint, apikey, subscription_id, resource_group_name, aoai_account_name]):
-        st.success("✅ All required environment variables are set")
+        st.success("✅ All basic required environment variables are set")
     else:
-        st.error("❌ Some required environment variables are missing")
+        st.error("❌ Some basic required environment variables are missing")
+        
+    if all([sp_client_id, sp_client_secret, sp_tenant_id]):
+        st.success("✅ Service Principal credentials are set (required for Docker)")
+    else:
+        st.warning("⚠️ Service Principal credentials missing (required for Docker authentication)")
+        st.info("Run: `.\create-service-principal.ps1 -ServicePrincipalName 'ModelSelectorApp'`")
 
 # Validate required parameters
 required_vars = {
@@ -81,14 +97,18 @@ except Exception as e:
 # Create Cognitive Services client and list deployments with error handling
 try:
     print("Attempting to create Cognitive Services client...")
-    
-    # Try multiple authentication methods for better Docker compatibility
+      # Try multiple authentication methods for better Docker compatibility
     azure_credential = None
     
     # Method 1: Try Service Principal credentials from environment variables
     client_id = os.getenv('AZURE_CLIENT_ID')
     client_secret = os.getenv('AZURE_CLIENT_SECRET')
     tenant_id = os.getenv('AZURE_TENANT_ID')
+    
+    print("Service Principal credentials check:")
+    print(f"  AZURE_CLIENT_ID: {'SET' if client_id else 'NOT SET'}")
+    print(f"  AZURE_CLIENT_SECRET: {'SET' if client_secret else 'NOT SET'}")
+    print(f"  AZURE_TENANT_ID: {'SET' if tenant_id else 'NOT SET'}")
     
     if client_id and client_secret and tenant_id:
         print("Using Service Principal authentication...")
@@ -98,6 +118,7 @@ try:
             client_id=client_id,
             client_secret=client_secret
         )
+        print("Service Principal credential created successfully")
     else:
         print("Service Principal credentials not found, trying DefaultAzureCredential...")
         azure_credential = DefaultAzureCredential()
