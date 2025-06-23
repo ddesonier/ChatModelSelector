@@ -1,0 +1,6 @@
+streamlit
+streamlit-chat
+openai
+azure-identity
+azure-mgmt-cognitiveservices
+python-dotenv
