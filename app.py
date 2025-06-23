@@ -175,7 +175,6 @@ def create_azure_credential():
     """
     Create Azure credential using multiple Entra ID authentication methods.
     Prioritizes security best practices and supports various deployment scenarios.
-    Includes credential validation and token caching for improved reliability.
     """
     print("🔐 Initializing Entra ID authentication...")
     
@@ -193,20 +192,10 @@ def create_azure_credential():
             else:
                 credential = ManagedIdentityCredential()
                 print("✅ Using System-Assigned Managed Identity")
-            
-            # Validate credential by attempting to get a token
-            try:
-                test_token = credential.get_token("https://management.azure.com/.default")
-                if test_token and test_token.token:
-                    print("✅ Managed Identity token validation successful")
-                    return credential
-                else:
-                    raise Exception("Failed to obtain valid token")
-            except Exception as token_error:
-                print(f"❌ Managed Identity token validation failed: {token_error}")
-                
+            return credential
         except Exception as e:
-            print(f"❌ Managed Identity failed: {e}")    
+            print(f"❌ Managed Identity failed: {e}")
+    
     # Method 2: Service Principal (for CI/CD and container scenarios)
     client_id = os.getenv('AZURE_CLIENT_ID')
     client_secret = os.getenv('AZURE_CLIENT_SECRET')
@@ -226,18 +215,8 @@ def create_azure_credential():
                 client_id=client_id,
                 client_secret=client_secret
             )
-            
-            # Validate credential
-            try:
-                test_token = credential.get_token("https://management.azure.com/.default")
-                if test_token and test_token.token:
-                    print("✅ Service Principal credential validated successfully")
-                    return credential
-                else:
-                    raise Exception("Failed to obtain valid token")
-            except Exception as token_error:
-                print(f"❌ Service Principal token validation failed: {token_error}")
-                
+            print("✅ Service Principal credential created successfully")
+            return credential
         except Exception as e:
             print(f"❌ Service Principal authentication failed: {e}")
     
@@ -252,16 +231,8 @@ def create_azure_credential():
                 client_id=client_id,
                 certificate_path=certificate_path
             )
-            
-            # Validate credential
-            try:
-                test_token = credential.get_token("https://management.azure.com/.default")
-                if test_token and test_token.token:
-                    print("✅ Certificate-based authentication validated successfully")
-                    return credential
-            except Exception as token_error:
-                print(f"❌ Certificate authentication token validation failed: {token_error}")
-                
+            print("✅ Certificate-based authentication configured")
+            return credential
         except Exception as e:
             print(f"❌ Certificate authentication failed: {e}")
     
@@ -273,9 +244,7 @@ def create_azure_credential():
             from azure.identity import InteractiveBrowserCredential
             credential = InteractiveBrowserCredential(
                 tenant_id=tenant_id,
-                client_id=client_id,
-                # Specify redirect URI for better control
-                redirect_uri=os.getenv('AZURE_REDIRECT_URI', 'http://localhost:8400')
+                client_id=client_id
             )
             print("✅ Interactive browser authentication configured")
             return credential
@@ -287,7 +256,8 @@ def create_azure_credential():
     if use_device_code and client_id and tenant_id:
         print("📱 Using Device Code authentication...")
         try:
-            from azure.identity import DeviceCodeCredential            credential = DeviceCodeCredential(
+            from azure.identity import DeviceCodeCredential
+            credential = DeviceCodeCredential(
                 tenant_id=tenant_id,
                 client_id=client_id
             )
@@ -296,31 +266,23 @@ def create_azure_credential():
         except Exception as e:
             print(f"❌ Device code authentication failed: {e}")
     
-    # Method 6: Azure CLI (for local development)
-    print("🖥️ Attempting Azure CLI authentication...")
+    # Method 6: Azure CLI (for local development) - Skip in Docker as it's not available
     try:
-        from azure.identity import AzureCliCredential
-        credential = AzureCliCredential()
-        # Test the credential
-        result = credential.get_token("https://management.azure.com/.default")
-        if result:
-            print("✅ Azure CLI authentication successful")
-            return credential
+        # Check if we're in a container environment
+        in_docker = os.path.exists('/.dockerenv') or os.getenv('DOCKER_CONTAINER') == 'true'
+        if not in_docker:
+            print("🖥️ Attempting Azure CLI authentication...")
+            from azure.identity import AzureCliCredential
+            credential = AzureCliCredential()
+            # Test the credential
+            test_token = credential.get_token("https://management.azure.com/.default")
+            if test_token:
+                print("✅ Azure CLI authentication successful")
+                return credential
+        else:
+            print("🐳 Skipping Azure CLI authentication (Docker environment)")
     except Exception as e:
         print(f"❌ Azure CLI authentication failed: {e}")
-    
-    # Method 7: Azure PowerShell (for local development)
-    print("⚡ Attempting Azure PowerShell authentication...")
-    try:
-        from azure.identity import AzurePowerShellCredential
-        credential = AzurePowerShellCredential()
-        # Test the credential
-        result = credential.get_token("https://management.azure.com/.default")
-        if result:
-            print("✅ Azure PowerShell authentication successful")
-            return credential
-    except Exception as e:
-        print(f"❌ Azure PowerShell authentication failed: {e}")
     
     # Fallback: DefaultAzureCredential (tries multiple methods automatically)
     print("🔄 Falling back to DefaultAzureCredential...")
@@ -336,7 +298,8 @@ def create_azure_credential():
 try:
     print("Attempting to create Cognitive Services client...")
     azure_credential = create_azure_credential()
-      # Add timeout and retry configuration for better reliability
+    
+    # Add timeout and retry configuration for better reliability
     from azure.core.pipeline.policies import RetryPolicy
     
     client2 = CognitiveServicesManagementClient(
@@ -472,7 +435,7 @@ az cognitiveservices account list --query "[?kind=='OpenAI'].{name:name, resourc
     st.info("💡 **Debug Information:**")
     st.info("Check the console/terminal output for detailed authentication attempts and error messages.")
     
-    deployments = []  # Fallback to empty list
+    deployments = []  # Fallback to empty list when exception occurs
 
 # Check if deployments are available
 if not deployments:
