@@ -326,8 +326,7 @@ try:
     )
     
     end_time = time.time()
-    print(f"✅ Deployment list call successful (took {end_time - start_time:.2f} seconds)")
-      # List deployments with better error handling
+    print(f"✅ Deployment list call successful (took {end_time - start_time:.2f} seconds)")    # List deployments with better error handling
     deployments = []
     deployment_count = 0
     
@@ -335,7 +334,9 @@ try:
         for item in results:
             deployments.append(item.name)
             deployment_count += 1
-            print(f"Found deployment: {item.name} (Model: {getattr(item.properties, 'model', {}).get('name', 'Unknown')})")
+            # Fix the model name access - model is an object, not a dict
+            model_name = getattr(item.properties.model, 'name', 'Unknown') if hasattr(item.properties, 'model') and item.properties.model else 'Unknown'
+            print(f"Found deployment: {item.name} (Model: {model_name})")
     except Exception as iteration_error:
         print(f"❌ Error iterating through deployments: {iteration_error}")
         deployments = []
