@@ -81,8 +81,29 @@ except Exception as e:
 # Create Cognitive Services client and list deployments with error handling
 try:
     print("Attempting to create Cognitive Services client...")
+    
+    # Try multiple authentication methods for better Docker compatibility
+    azure_credential = None
+    
+    # Method 1: Try Service Principal credentials from environment variables
+    client_id = os.getenv('AZURE_CLIENT_ID')
+    client_secret = os.getenv('AZURE_CLIENT_SECRET')
+    tenant_id = os.getenv('AZURE_TENANT_ID')
+    
+    if client_id and client_secret and tenant_id:
+        print("Using Service Principal authentication...")
+        from azure.identity import ClientSecretCredential
+        azure_credential = ClientSecretCredential(
+            tenant_id=tenant_id,
+            client_id=client_id,
+            client_secret=client_secret
+        )
+    else:
+        print("Service Principal credentials not found, trying DefaultAzureCredential...")
+        azure_credential = DefaultAzureCredential()
+    
     client2 = CognitiveServicesManagementClient(
-        credential=DefaultAzureCredential(),
+        credential=azure_credential,
         subscription_id=subscription_id,
     )
     print("Cognitive Services client created successfully")

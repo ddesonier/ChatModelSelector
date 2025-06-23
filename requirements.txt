@@ -1,6 +1,6 @@
-streamlit
-streamlit-chat
-openai
-azure-identity
-azure-mgmt-cognitiveservices
-python-dotenv
+streamlit>=1.46.0
+streamlit-chat>=0.1.1
+openai>=1.90.0
+azure-identity>=1.23.0
+azure-mgmt-cognitiveservices>=13.6.0
+python-dotenv>=1.1.0
